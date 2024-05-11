@@ -2,16 +2,16 @@
 <html lang="">
 	<head>
 		<title>Contact App</title>
+		<script src="https://unpkg.com/htmx.org"></script>
 		<link
 			rel="stylesheet"
 			href="https://the.missing.style/v0.2.0/missing.min.css"
 		/>
 	</head>
-	<body>
+	<body hx-boost="true">
 		<main>
 			<header><h1>Contacts.app</h1></header>
 			{% block content %}{% endblock content %}
 		</main>
 	</body>
 </html>
-

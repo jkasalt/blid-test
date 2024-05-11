@@ -24,10 +24,73 @@
 				<a href="/contacts/{{ loop.index - 1 }}">View</a>
 			</td>
 		</tr>
-		{% endfor %}
+		{% endfor %} {% if contacts|length == 1 %}
+		<tr>
+			<td colspan="5" style="text-align: center">
+				<button
+					hx-target="closest tr"
+					hx-swap="outerHTML"
+					hx-select="tbody > tr"
+					hx-get="/contacts?page={{page + 1}}"
+				>
+					Load More
+				</button>
+			</td>
+		</tr>
+		{% endif %}
 	</tbody>
 </table>
+<audio controls>
+	<source
+		src="https://p.scdn.co/mp3-preview/3cf6efcc13a380485fa20fda1602b8ad4e3f0b0c?cid=cfe923b2d660439caf2b557b21f31221"
+		type="audio/mpeg"
+	/>
+	Your browser does not support the audio element
+</audio>
 <p>
 	<a href="/contacts/new">Add contact</a>
 </p>
+
+<button id="togglePlay">Toggle Play</button>
+<script src="https://sdk.scdn.co/spotify-player.js"></script>
+<script>
+	window.onSpotifyWebPlaybackSDKReady = () => {
+		const token = "token";
+		const player = new Spotify.Player({
+			name: "Web Playback SDK Quick Start Player",
+			getOAuthToken: (cb) => {
+				cb(token);
+			},
+			volume: 0.5,
+		});
+
+		// Ready
+		player.addListener("ready", ({ device_id }) => {
+			console.log("Ready with Device ID", device_id);
+		});
+
+		// Not Ready
+		player.addListener("not_ready", ({ device_id }) => {
+			console.log("Device ID has gone offline", device_id);
+		});
+
+		player.addListener("initialization_error", ({ message }) => {
+			console.error(message);
+		});
+
+		player.addListener("authentication_error", ({ message }) => {
+			console.error(message);
+		});
+
+		player.addListener("account_error", ({ message }) => {
+			console.error(message);
+		});
+
+		document.getElementById("togglePlay").onclick = function () {
+			player.togglePlay();
+		};
+
+		player.connect();
+	};
+</script>
 {% endblock content %}
