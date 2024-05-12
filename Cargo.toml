@@ -8,15 +8,18 @@ axum = { version = "0.7", features = [ "macros" ] }
 tokio = { version = "1", features = [ "full" ] }
 serde = { version = "1", features = [ "derive" ] }
 serde_json = "1"
+serde_qs = "0.13"
 anyhow = "1"
 tera = "1"
 once_cell = "1"
 itertools = "*"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3" }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tower-http = { version = "0.5", features = [ "trace" ] }
 reqwest = {version = "0.12", features = ["json"]}
 rand = "0.8"
+dotenv_codegen = "0.15.0"
+base64 = "0.22"
 
 [lints.clippy]
 pedantic = "warn"

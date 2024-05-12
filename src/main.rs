@@ -1,20 +1,22 @@
 use axum::{
     extract::{rejection::FormRejection, Path, Query, State},
-    http::StatusCode,
+    http::{StatusCode, Uri},
     response::{Html, IntoResponse, Redirect, Result},
     routing::{delete, get, post},
     Form, Router,
 };
+use base64::prelude::*;
+use dotenv_codegen::dotenv;
 use once_cell::sync::Lazy;
-use reqwest::Client;
+use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
 };
 use tera::{Context, Tera};
-use tracing::debug;
+use tracing_subscriber::prelude::*;
 
 type AppState = State<Arc<Mutex<Vec<Contact>>>>;
 
@@ -36,6 +38,14 @@ static TEMPLATES: Lazy<Tera> = Lazy::new(|| {
     tera.autoescape_on(vec![".html"]);
     tera
 });
+
+fn random_alphanum(len: usize) -> String {
+    thread_rng()
+        .sample_iter(Alphanumeric)
+        .map(char::from)
+        .take(len)
+        .collect()
+}
 
 struct AppError(anyhow::Error);
 
@@ -73,7 +83,7 @@ async fn contacts(
         .unwrap_or(0);
 
     contacts = contacts.chunks(1).nth(page).unwrap_or_default().to_vec();
-    debug!("{:?}", &contacts);
+    tracing::debug!("{:?}", &contacts);
     let context = Context::from_serialize(json!({
         "query": q,
         "contacts": contacts,
@@ -172,6 +182,79 @@ async fn delete_contact_request(
     Redirect::to("/contacts")
 }
 
+async fn send_spotify_code_request(
+    State(s): State<Arc<Mutex<HashSet<String>>>>,
+) -> Result<impl IntoResponse, AppError> {
+    let state = random_alphanum(16);
+    let qs = serde_qs::to_string(&json!({
+        "response_type": "code",
+        "client_id": dotenv!("CLIENT_ID"),
+        "scope": "streaming user-read-email user-read-private",
+        "redirect_uri": "http://localhost:3000/auth/callback",
+        "state": state,
+    }))?;
+    tracing::debug!("qs: {qs:#?}");
+    let uri = Uri::builder()
+        .scheme("https")
+        .authority("accounts.spotify.com")
+        .path_and_query(format!("/authorize/?{qs}"))
+        .build()?;
+    tracing::debug!("uri: {uri}");
+    s.lock().unwrap().insert(state);
+    Ok(Redirect::to(&uri.to_string()))
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct SpotifyAuthResponse {
+    code: String,
+    state: String,
+}
+
+async fn send_spotify_token_request(
+    Query(q): Query<SpotifyAuthResponse>,
+    State(s): State<Arc<Mutex<HashSet<String>>>>,
+) -> Result<impl IntoResponse, AppError> {
+    if s.lock().unwrap().take(&q.state).is_none() {
+        tracing::warn!(
+            "Attempting to find state string {} in state collection {:#?}, but it was not found",
+            q.state,
+            s.lock().unwrap()
+        );
+        return Ok((StatusCode::UNAUTHORIZED, String::from("Unauthorized")));
+    }
+
+    let client = reqwest::Client::new();
+
+    let request = client
+        .post("https://accounts.spotify.com/api/token")
+        .form(&json!({
+            "code": q.code,
+            "redirect_uri": "http://localhost:3000/auth/callback",
+            "grant_type": "authorization_code"
+        }))
+        .header(
+            "Authorization",
+            format!(
+                "Basic {}",
+                BASE64_STANDARD.encode(format!(
+                    "{}:{}",
+                    dotenv!("CLIENT_ID"),
+                    dotenv!("CLIENT_SECRET")
+                )),
+            ),
+        );
+
+    tracing::debug!("{request:#?}");
+
+    let response = request.send().await?;
+
+    tracing::debug!("{response:#?}");
+
+    let body: serde_json::Value = response.json().await?;
+
+    Ok((StatusCode::OK, format!("{body:#?}")))
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 struct SpotifyToken {
     access_token: String,
@@ -181,41 +264,6 @@ struct SpotifyToken {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // let client = Client::new();
-    // let res = client
-    //     .post("https://accounts.spotify.com/api/token")
-    //     .header("Content-Type", "aaplication/x-www-form-urlencoded")
-    //     .form(&[
-    //         ("grant_type", "client_credentials"),
-    //         ("client_id", "client_id"),
-    //         ("client_secret", "secret"),
-    //     ])
-    //     .send()
-    //     .await?;
-    // let token: SpotifyToken = res.json().await.unwrap();
-    //
-    // println!("{token:#?}");
-    //
-    // let result = client
-    //     .get("https://api.spotify.com/v1/search")
-    //     .query(&[("q", "classic"), ("type", "track")])
-    //     .header(
-    //         "Authorization",
-    //         format!("{} {}", token.token_type, token.access_token),
-    //     )
-    //     .send()
-    //     .await?
-    //     .json::<serde_json::Value>()
-    //     .await
-    //     .unwrap();
-    //
-    // println!("{result:#?}");
-    //
-    // Ok(())
-
-    #[cfg(debug_assert)]
-    TEMPLATES.full_reload();
-
     let state = Arc::new(Mutex::new(vec![
         Contact {
             first: "Alice".to_string(),
@@ -229,10 +277,23 @@ async fn main() -> anyhow::Result<()> {
         },
     ]));
 
-    tracing_subscriber::fmt::fmt()
-        .pretty()
-        .with_max_level(tracing::Level::DEBUG)
+    let spotify_auth_requests_state = Arc::new(Mutex::new(HashSet::new()));
+
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                // axum logs rejections from built-in extractors with the `axum::rejection`
+                // target, at `TRACE` level. `axum::rejection=trace` enables showing those events
+                "blid_test=debug,tower_http=debug,axum::rejection=trace".into()
+            }),
+        )
+        .with(tracing_subscriber::fmt::layer())
         .init();
+
+    let spotify_auth_routes = Router::new()
+        .route("/", get(send_spotify_code_request))
+        .route("/callback", get(send_spotify_token_request))
+        .with_state(spotify_auth_requests_state);
 
     let app = Router::new()
         .route("/", get(index))
@@ -243,6 +304,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/contacts/:id", delete(delete_contact_request))
         .route("/contacts/new", get(new_contact_form))
         .route("/contacts/new", post(new_contact_request))
+        .nest("/auth", spotify_auth_routes)
         .with_state(state)
         .layer(tower_http::trace::TraceLayer::new_for_http());
 
