@@ -167,16 +167,15 @@ async fn test_session(State(s): AppState, headers: HeaderMap) -> impl IntoRespon
     }
 }
 
-async fn get_token(headers: HeaderMap) -> impl IntoResponse {
-    if let Some(session_id) = headers
+fn get_token(headers: &HeaderMap) -> impl IntoResponse {
+    headers
         .get("Cookie")
         .and_then(|cookies| cookies.to_str().ok())
         .and_then(get_session)
-    {
-        session_id.to_owned().into_response()
-    } else {
-        StatusCode::NOT_FOUND.into_response()
-    }
+        .map_or_else(
+            || StatusCode::NOT_FOUND.into_response(),
+            |session_id| session_id.to_owned().into_response(),
+        )
 }
 
 #[derive(Serialize, Deserialize, Debug)]
