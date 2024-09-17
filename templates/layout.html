@@ -3,14 +3,38 @@
 	<head>
 		<title>Contact App</title>
 		<script src="https://unpkg.com/htmx.org"></script>
+		<script src="//unpkg.com/alpinejs" defer></script>
+		<script src="https://sdk.scdn.co/spotify-player.js" async="true"></script>
 		<link
 			rel="stylesheet"
 			href="https://the.missing.style/v0.2.0/missing.min.css"
 		/>
+		<script>
+			window.onSpotifyWebPlaybackSDKReady = async () => {
+				console.log("hello");
+				const token = await fetch("/token");
+				const player = new window.Spotify.Player({
+					getOAuthToken: (cb) => cb(token),
+					name: "Web Playback SDK Quick Start Player",
+				});
+				player.addListener("ready", ({ device_id }) => {
+					console.log("Ready with Device ID", device_id);
+				});
+
+				player.addListener("not_ready", ({ device_id }) => {
+					console.log("Device ID has gone offline", device_id);
+				});
+
+				player.connect();
+			};
+		</script>
 	</head>
+
 	<body hx-boost="true">
 		<main>
-			<header><h1>Contacts.app</h1></header>
+			<header>
+				<h1>Contacts.app</h1>
+			</header>
 			{% block content %}{% endblock content %}
 		</main>
 	</body>

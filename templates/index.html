@@ -1,53 +1,37 @@
 {% extends "layout.html" %} {% block content %}
-<form action="/contacts" metod="get" class="tool-bar">
-	<label for="search">Search term</label>
-	<input id="search" type="search" name="q" value="{{ query }}" />
-	<input type="submit" value="Search" />
+<form hx-boost="false" action="/auth" method="get">
+	<button type="submit">Login with Spotify</button>
 </form>
-<table>
-	<thead>
-		<tr>
-			<th>First</th>
-			<th>Last</th>
-			<th>Phone</th>
-			<th></th>
-		</tr>
-	</thead>
-	<tbody>
-		{% for contact in contacts %}
-		<tr>
-			<td>{{ contact.first }}</td>
-			<td>{{ contact.last }}</td>
-			<td>{{ contact.phone }}</td>
-			<td>
-				<a href="/contacts/{{ loop.index - 1 }}/edit">Edit</a>
-				<a href="/contacts/{{ loop.index - 1 }}">View</a>
-			</td>
-		</tr>
-		{% endfor %} {% if contacts|length == 1 %}
-		<tr>
-			<td colspan="5" style="text-align: center">
-				<button
-					hx-target="closest tr"
-					hx-swap="outerHTML"
-					hx-select="tbody > tr"
-					hx-get="/contacts?page={{page + 1}}"
-				>
-					Load More
-				</button>
-			</td>
-		</tr>
-		{% endif %}
-	</tbody>
-</table>
-<audio controls>
-	<source
-		src="https://p.scdn.co/mp3-preview/3cf6efcc13a380485fa20fda1602b8ad4e3f0b0c?cid=cfe923b2d660439caf2b557b21f31221"
-		type="audio/mpeg"
-	/>
-	Your browser does not support the audio element
-</audio>
-<p>
-	<a href="/contacts/new">Add contact</a>
-</p>
+<div x-data="{show: false}">
+	<!-- <button @click="show = !show">Toggle</button> -->
+	<!-- <script> -->
+	<!-- 	document.addEventListener("alpine:init", () => { -->
+	<!-- 		Alpine.data("timer", () => ({ -->
+	<!-- 			count: 2, -->
+	<!-- 			paused: false, -->
+	<!-- 			init() { -->
+	<!-- 				setInterval(() => { -->
+	<!-- 					if (this.paused) { -->
+	<!-- 						return; -->
+	<!-- 					} -->
+	<!-- 					if (this.count > 0) { -->
+	<!-- 						this.count -= 1; -->
+	<!-- 					} else if (this.count === 0) { -->
+	<!-- 						this.paused = true; -->
+	<!-- 						dispatchEvent(new CustomEvent("timerend")); -->
+	<!-- 					} -->
+	<!-- 				}, 1000); -->
+	<!-- 			}, -->
+	<!-- 		})); -->
+	<!-- 	}); -->
+	<!-- </script> -->
+	<!-- <div -->
+	<!-- 	x-data="timer" -->
+	<!-- 	x-show="show" -->
+	<!-- 	x-transition -->
+	<!-- 	@timerend.window="alert('its over!!')" -->
+	<!-- > -->
+	<!-- 	<h1 x-text="count"></h1> -->
+	<!-- </div> -->
+</div>
 {% endblock content %}
